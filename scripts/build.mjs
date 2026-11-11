@@ -1,0 +1,21 @@
+import {readFile,writeFile,mkdir,rm,readdir} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {companies,events} from '../web/catalog.js';
+const root=resolve(import.meta.dirname,'..');
+const manifest=JSON.parse(await readFile(resolve(root,'.openai/hosting.json'),'utf8'));
+delete manifest.static;
+await writeFile(resolve(root,'.openai/hosting.json'),JSON.stringify(manifest,null,2)+'\n');
+const template=await readFile(resolve(root,'scripts/quant_model.template.py'),'utf8');
+const python=template.replace('__CATALOG_JSON__',JSON.stringify({companies,events}));
+await writeFile(resolve(root,'web/quant_model.py'),python);
+const history=JSON.parse(await readFile(resolve(root,'web/data/history.json'),'utf8'));
+await writeFile(resolve(root,'web/sample-prices.csv'),'Date,Close\n'+history.series.AAPL.map(r=>r.date+','+r.close).join('\n')+'\n');
+const assets={};
+async function walk(dir,prefix=''){for(const file of await readdir(dir,{withFileTypes:true})){if(file.name.startsWith('.')||file.name==='__pycache__')continue;if(file.isDirectory())await walk(resolve(dir,file.name),prefix+'/'+file.name);else{const name=prefix+'/'+file.name;if(name==='/previous-prototype.html')continue;const ext=file.name.split('.').at(-1);assets[name]={body:await readFile(resolve(dir,file.name),'utf8'),type:({html:'text/html',css:'text/css',js:'text/javascript',json:'application/json',py:'text/plain',csv:'text/csv'})[ext]+'; charset=utf-8'}}}}
+await walk(resolve(root,'web'));
+const yahooAdapter=await readFile(resolve(root,'worker/yahoo.js'),'utf8');
+const worker=(await readFile(resolve(root,'worker/index.js'),'utf8')).replace('const assets = __ASSETS__;',()=> 'const assets = '+JSON.stringify(assets)+';').replace('// __YAHOO_ADAPTER__',()=>yahooAdapter).replace('new Set(__SYMBOLS__)',()=> 'new Set('+JSON.stringify(companies.map(c=>c.symbol))+')');
+await rm(resolve(root,'dist'),{recursive:true,force:true});
+await mkdir(resolve(root,'dist/server'),{recursive:true});await mkdir(resolve(root,'dist/.openai'),{recursive:true});
+await writeFile(resolve(root,'dist/server/index.js'),worker);await writeFile(resolve(root,'dist/.openai/hosting.json'),JSON.stringify(manifest,null,2));
+console.log('Built Quant Lab Worker with '+Object.keys(assets).length+' assets.');
