@@ -36,6 +36,8 @@ This is a curated record of decisions and completed work from our project conver
 - **V2** adds an interactive practice-budget position-sizing lab: a dollar allocation and whole-share estimate, modeled 5th-percentile loss constraint, CRRA utility across stock/cash weights, lower-drift sensitivity band, and dollar outcomes after a historical reveal. The game keeps prediction quality and allocation outcome separate.
 - A user can enter the proposed stock purchase directly (for example, $1 million in AAPL) and choose a one-month or one-year horizon. The simulation reports expected, median, and central 80% dollar outcomes; the entered amount updates the practice budget if necessary. Historical Yahoo requests cover enough time after a replay origin for a one-year outcome when observations are available.
 - The V2 sizing calculation is conditional on an estimated single-stock distribution and does not include other holdings, liabilities, taxes, live execution, or a complete suitability assessment.
+- The later V2 teaching update uses the dated source close as the starting share price for new simulations, keeps earlier index-100 journal records readable, and explains Monte Carlo percentiles, parameters, and sizing controls through focusable popups. The reading order is stock/horizon → assumptions → price scenarios → dollar decision → lock/reveal or later evaluation.
+- An optional 1–30 year holding card analytically extends the same μ and σ without scoring or saving it as a game forecast. Long-horizon outputs assume the same GBM parameters persist, which is a strong and increasingly fragile assumption.
 
 ## Open research questions
 
