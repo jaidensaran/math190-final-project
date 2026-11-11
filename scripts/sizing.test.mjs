@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sizePosition} from '../web/sizing.js';
+import {sizePosition,longTermProjection} from '../web/sizing.js';
 
 test('position sizing respects downside budget and converts allocation to whole shares',()=>{
   const terminal=Array.from({length:101},(_,i)=>80+i*.4);
@@ -28,4 +28,20 @@ test('a million-dollar, one-year scenario returns dollar outcomes',()=>{
   assert.equal(result.shares,4000);
   assert.ok(result.p10<result.median&&result.median<result.p90);
   assert.ok(result.fifth<result.p10);
+});
+
+test('dollar-price simulations preserve return-based sizing',()=>{
+  const indexed=[80,90,100,110,140],priced=indexed.map(x=>x*3.5);
+  const inputs={budget:10000,allocation:40,maxLossPct:10,mu:.08,days:21};
+  const a=sizePosition({terminal:indexed,startPrice:100,...inputs});
+  const b=sizePosition({terminal:priced,startPrice:350,...inputs});
+  assert.equal(a.expected,b.expected);assert.equal(a.fifth,b.fifth);
+  assert.equal(a.modeled,b.modeled);
+});
+
+test('separate holding illustration compounds GBM assumptions without changing game paths',()=>{
+  const a=longTermProjection({amount:1000,years:5,mu:.08,sigma:.2});
+  assert.ok(Math.abs(a.median-1000*Math.exp((.08-.5*.2**2)*5))<1e-8);
+  assert.ok(a.low<a.median&&a.median<a.high);
+  assert.throws(()=>longTermProjection({amount:1000,years:31,mu:.08,sigma:.2}));
 });
