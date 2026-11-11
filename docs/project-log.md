@@ -30,6 +30,13 @@ This is a curated record of decisions and completed work from our project conver
 - `math190-final-project` is the shared public source repository for the website, algorithms, tests, and this log.
 - Future project decisions and substantive implementation changes can be summarized here when code is updated. Automatic verbatim archiving of chat messages is not configured.
 
+## Version checkpoints
+
+- **V1** is the deployed website before position sizing. Its Site version and source commit are recorded in [versions.md](versions.md).
+- **V2** adds an interactive practice-budget position-sizing lab: a dollar allocation and whole-share estimate, modeled 5th-percentile loss constraint, CRRA utility across stock/cash weights, lower-drift sensitivity band, and dollar outcomes after a historical reveal. The game keeps prediction quality and allocation outcome separate.
+- A user can enter the proposed stock purchase directly (for example, $1 million in AAPL) and choose a one-month or one-year horizon. The simulation reports expected, median, and central 80% dollar outcomes; the entered amount updates the practice budget if necessary. Historical Yahoo requests cover enough time after a replay origin for a one-year outcome when observations are available.
+- The V2 sizing calculation is conditional on an estimated single-stock distribution and does not include other holdings, liabilities, taxes, live execution, or a complete suitability assessment.
+
 ## Open research questions
 
 - Decide whether the primary score should emphasize predictive distribution quality, decisions after costs, or both.
