@@ -22,6 +22,8 @@ This is a curated record of decisions and completed work from our project conver
 - An optional server-only Alpha Vantage key supports another price adapter and news. CSV import remains available. Keys are never placed in browser code or this repository.
 - Historical replay separates information available at the selected origin from later prices. The future close must not leak into the forecast before the reveal.
 - The site includes bundled archived teaching series and clearly labels illustrative inputs where live history is unavailable.
+- The Forecast journal saves rounds across reloads in the same browser. Users can export a JSON backup and import it later, including on another device. There is no account-based sync; browser storage may be cleared.
+- Evaluated rounds appear in an overall leaderboard and per-stock summary using CRPS improvement over each round's unchanged baseline. The journal shows how selected slider assumptions affected that run's score in a one-factor neutralization check. These are model sensitivity results, not causal explanations of the market move.
 
 ## Repository and collaboration
 
