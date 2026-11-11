@@ -47,7 +47,7 @@ export function parseYahoo(payload,symbol,now=Date.now()) {
 export async function fetchYahoo(symbol,origin=null,fetcher=fetch,now=Date.now()) {
   const url=new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
   url.searchParams.set('interval','1d');url.searchParams.set('events','div,splits');url.searchParams.set('includeAdjustedClose','true');
-  if(origin){const day=Date.parse(origin+'T00:00:00Z');url.searchParams.set('period1',String(Math.floor((day-400*86400000)/1000)));url.searchParams.set('period2',String(Math.floor(Math.min(now,day+180*86400000)/1000)));}
+  if(origin){const day=Date.parse(origin+'T00:00:00Z');url.searchParams.set('period1',String(Math.floor((day-400*86400000)/1000)));url.searchParams.set('period2',String(Math.floor(Math.min(now,day+400*86400000)/1000)));}
   else url.searchParams.set('range','2y');
   let response;
   try{response=await fetcher(url,{headers:{Accept:'application/json','User-Agent':'QuantLab/0.3 (personal research)'},signal:AbortSignal.timeout(15000),redirect:'manual'});}
