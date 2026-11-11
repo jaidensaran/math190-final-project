@@ -1,8 +1,9 @@
 import {companies} from './catalog.js';
 import {parameters,simulate,crps} from './model.js';
 
-// CRPS is measured on the same rebased-100 price index for every round. Skill
-// compares each forecast with its own unchanged, same-origin baseline.
+// V1/V2 rounds use a rebased-100 index; newer rounds use source-price dollars.
+// Skill compares each forecast with its own same-origin baseline, so it remains
+// dimensionless across both journal formats.
 export function rankedForecasts(journal,symbol='all'){
   return journal.filter(f=>(symbol==='all'||f.symbol===symbol)&&f.result&&Number.isFinite(f.result.score)&&Number.isFinite(f.result.baselineScore)&&f.result.baselineScore>1e-9)
     .map(f=>({forecast:f,skill:1-f.result.score/f.result.baselineScore}))
@@ -29,7 +30,7 @@ export function factorChecks(f,actualIndex,limit=3){
   const score=crps(f.terminal,actualIndex);
   return effects.map(e=>{
     const weights={...f.weights,[e.id]:50},p=parameters(company,weights,f.baseline);
-    const counterfactual=simulate({s0:100,mu:p.mu,sigma:p.sigma,days:f.days,seed:f.seed??731});
+    const counterfactual=simulate({s0:f.startPrice??100,mu:p.mu,sigma:p.sigma,days:f.days,seed:f.seed??731});
     return{id:e.id,name:e.name,weight:f.weights[e.id],scoreChange:crps(counterfactual.terminal,actualIndex)-score};
   });
 }
