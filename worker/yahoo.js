@@ -44,11 +44,11 @@ export function parseYahoo(payload,symbol,now=Date.now()) {
     source:`https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}/history/`,
     notice:'Unofficial public interface; availability is not guaranteed. Daily history is not a streaming quote feed. Adjusted returns are vendor-adjusted, not pure ex-dividend price returns.'};
 }
-export async function fetchYahoo(symbol,origin=null,fetcher=fetch,now=Date.now()) {
+export async function fetchYahoo(symbol,origin=null,fetcher=fetch,now=Date.now(),horizonDays=252) {
   const url=new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`);
   url.searchParams.set('interval','1d');url.searchParams.set('events','div,splits');url.searchParams.set('includeAdjustedClose','true');
-  if(origin){const day=Date.parse(origin+'T00:00:00Z');url.searchParams.set('period1',String(Math.floor((day-400*86400000)/1000)));url.searchParams.set('period2',String(Math.floor(Math.min(now,day+400*86400000)/1000)));}
-  else url.searchParams.set('range','2y');
+  if(origin){const day=Date.parse(origin+'T00:00:00Z'),after=Math.max(400,Math.ceil(horizonDays*1.65));url.searchParams.set('period1',String(Math.floor((day-400*86400000)/1000)));url.searchParams.set('period2',String(Math.floor(Math.min(now,day+after*86400000)/1000)));}
+  else url.searchParams.set('range',horizonDays>252?'10y':'2y');
   let response;
   try{response=await fetcher(url,{headers:{Accept:'application/json','User-Agent':'QuantLab/0.3 (personal research)'},signal:AbortSignal.timeout(15000),redirect:'manual'});}
   catch(error){console.error('Yahoo chart request failed',String(error?.name||'Error'),String(error?.message||'Unknown network error').slice(0,250));throw new DataError('Yahoo could not be reached. Your existing data is unchanged.',502,'yahoo_unreachable');}
@@ -58,4 +58,20 @@ export async function fetchYahoo(symbol,origin=null,fetcher=fetch,now=Date.now()
   if(!response.ok)throw new DataError('Yahoo price history is temporarily unavailable.',502,'yahoo_unavailable');
   let payload;try{payload=await response.json()}catch{throw new DataError('Yahoo returned an unexpected response. Your existing data is unchanged.',502,'invalid_yahoo_data');}
   return parseYahoo(payload,symbol,now);
+}
+
+// This is an undocumented public Yahoo endpoint, so failures must remain visible.
+// Its response contains recent headlines only; it is not a point-in-time archive.
+export async function fetchYahooNews(symbol,fetcher=fetch,now=Date.now()){
+  const url=new URL('https://query1.finance.yahoo.com/v1/finance/search');
+  url.searchParams.set('q',symbol);url.searchParams.set('quotesCount','0');url.searchParams.set('newsCount','10');
+  let response;
+  try{response=await fetcher(url,{headers:{Accept:'application/json','User-Agent':'QuantLab/0.4 (personal research)'},signal:AbortSignal.timeout(12000),redirect:'manual'});}
+  catch{throw new DataError('Yahoo news could not be reached. Open the linked Yahoo news page instead.',502,'yahoo_news_unreachable')}
+  if(response.status===429)throw new DataError('Yahoo is rate-limiting news requests. Open the Yahoo news page or try again later.',429,'yahoo_news_rate_limited',900);
+  if([401,403].includes(response.status)||response.status>=300&&response.status<400)throw new DataError('Yahoo is not allowing this server to retrieve headlines. Open the Yahoo news page instead.',503,'yahoo_news_denied',900);
+  if(!response.ok)throw new DataError('Yahoo news is temporarily unavailable.',502,'yahoo_news_unavailable');
+  let payload;try{payload=await response.json()}catch{throw new DataError('Yahoo news returned an unexpected response.',502,'invalid_yahoo_news')}
+  const articles=(Array.isArray(payload.news)?payload.news:[]).filter(a=>/^https:\/\//.test(a.link||'')&&typeof a.title==='string').slice(0,10).map(a=>({title:a.title.slice(0,300),url:a.link,source:String(a.publisher||'Yahoo Finance').slice(0,100),time:Number.isFinite(a.providerPublishTime)?new Date(a.providerPublishTime*1000).toISOString():null}));
+  return{provider:'Yahoo Finance',symbol,fetchedAt:new Date(now).toISOString(),historical:false,articles,source:`https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}/news/`};
 }

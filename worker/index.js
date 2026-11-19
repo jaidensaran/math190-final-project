@@ -18,22 +18,26 @@ async function cached(request,ctx,key,fn){
   return json(data);
 }
 function validOrigin(value){if(!value)return null;const t=Date.parse(value+'T00:00:00Z');if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(t)||new Date(t).toISOString().slice(0,10)!==value||value<'1980-01-01'||t>Date.now())throw new DataError('Choose a valid historical origin between 1980 and today.',400,'invalid_origin');return value;}
+function validHorizon(value){if(!value)return 252;const days=Number(value);if(![21,63,126,252,504,1260].includes(days))throw new DataError('Choose a supported simulation horizon.',400,'invalid_horizon');return days;}
 export default {async fetch(request,env={},ctx={waitUntil:()=>{}}){try{
   const url=new URL(request.url);
   if(!['GET','HEAD'].includes(request.method))return json({error:'Method not allowed.'},405,{Allow:'GET, HEAD'});
-  if(url.pathname==='/api/config')return json({configured:true,provider:'Yahoo Finance',defaultProvider:'yahoo',frequency:'daily',cacheHours:.25,newsConfigured:Boolean(env.ALPHA_VANTAGE_API_KEY),providers:{yahoo:{available:true,requiresKey:false,unofficial:true},alpha:{available:Boolean(env.ALPHA_VANTAGE_API_KEY),requiresKey:true}}});
+  if(url.pathname==='/api/config')return json({configured:true,provider:'Yahoo Finance',defaultProvider:'yahoo',frequency:'daily',cacheHours:.25,newsConfigured:true,newsHistorical:false,providers:{yahoo:{available:true,requiresKey:false,unofficial:true},alpha:{available:Boolean(env.ALPHA_VANTAGE_API_KEY),requiresKey:true}}});
   if(['/api/prices','/api/news'].includes(url.pathname)){
     const symbol=url.searchParams.get('symbol');if(!supported.has(symbol))return json({error:'Choose a company from the supported universe.'},400);
     const provider=url.searchParams.get('provider')||'yahoo';if(!['yahoo','alpha'].includes(provider))return json({error:'Unknown price provider.'},400);
-    const origin=validOrigin(url.searchParams.get('origin'));
-    if(url.pathname==='/api/news'||provider==='alpha'){
+    const origin=validOrigin(url.searchParams.get('origin')),horizon=validHorizon(url.searchParams.get('days'));
+    if(provider==='alpha'){
       if(!env.ALPHA_VANTAGE_API_KEY)return json({error:'Alpha Vantage news/price access needs a server-side key. Yahoo daily prices do not require that key.'},503);
     }
-    return await cached(request,ctx,[url.pathname,symbol,provider,origin||'recent',env.ALPHA_VANTAGE_ADJUSTED==='true'].join(':'),async()=>{
-      if(url.pathname==='/api/news'){const d=await alpha({function:'NEWS_SENTIMENT',tickers:symbol,limit:'10',sort:'LATEST'},env);return{provider:'Alpha Vantage',fetchedAt:new Date().toISOString(),articles:(d.feed||[]).filter(a=>/^https:\/\//.test(a.url||'')).slice(0,10).map(a=>({title:String(a.title||'').slice(0,400),url:a.url,source:String(a.source||''),time:String(a.time_published||''),summary:String(a.summary||'').slice(0,600)}))}}
+    if(url.pathname==='/api/news'&&origin)return json({error:'Historical Yahoo news is not available as a point-in-time feed. Replay does not show present-day headlines.'},422);
+    return await cached(request,ctx,[url.pathname,symbol,provider,origin||'recent',horizon,env.ALPHA_VANTAGE_ADJUSTED==='true'].join(':'),async()=>{
+      if(url.pathname==='/api/news'){
+        if(provider==='yahoo')return fetchYahooNews(symbol);
+        const d=await alpha({function:'NEWS_SENTIMENT',tickers:symbol,limit:'10',sort:'LATEST'},env);return{provider:'Alpha Vantage',fetchedAt:new Date().toISOString(),historical:false,articles:(d.feed||[]).filter(a=>/^https:\/\//.test(a.url||'')).slice(0,10).map(a=>({title:String(a.title||'').slice(0,400),url:a.url,source:String(a.source||''),time:String(a.time_published||''),summary:String(a.summary||'').slice(0,600)}))}}
       if(provider==='yahoo'){
         if(yahooCooldown?.until>Date.now())throw new DataError(yahooCooldown.message,yahooCooldown.status,yahooCooldown.code,Math.ceil((yahooCooldown.until-Date.now())/1000));
-        try{return await fetchYahoo(symbol,origin)}catch(e){if(e.retryAfter)yahooCooldown={...e,message:e.message,until:Date.now()+e.retryAfter*1000};throw e}
+        try{return await fetchYahoo(symbol,origin,fetch,Date.now(),horizon)}catch(e){if(e.retryAfter)yahooCooldown={...e,message:e.message,until:Date.now()+e.retryAfter*1000};throw e}
       }
       const adjusted=env.ALPHA_VANTAGE_ADJUSTED==='true';const d=await alpha({function:adjusted?'TIME_SERIES_DAILY_ADJUSTED':'TIME_SERIES_DAILY',symbol,outputsize:'compact'},env);const series=d['Time Series (Daily)'];if(!series)throw new DataError('No daily prices were returned. Check your provider plan or import CSV.');const today=new Date().toISOString().slice(0,10),rows=Object.entries(series).map(([date,v])=>({date,close:Number(v[adjusted?'5. adjusted close':'4. close'])})).filter(r=>/^\d{4}-\d{2}-\d{2}$/.test(r.date)&&r.date<=today&&Number.isFinite(r.close)&&r.close>0).sort((a,b)=>a.date.localeCompare(b.date));if(rows.length<41)throw new DataError('Insufficient daily history was returned.');return{provider:'alpha',providerName:'Alpha Vantage',symbol,currency:'USD',rows,asOf:rows.at(-1).date,fetchedAt:new Date().toISOString(),adjustment:adjusted?'Provider-adjusted closes':'Raw closes; splits and dividends are not adjusted',source:'https://www.alphavantage.co/documentation/#daily'};
     });

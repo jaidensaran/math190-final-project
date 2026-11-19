@@ -30,7 +30,7 @@ export function factorChecks(f,actualIndex,limit=3){
   const score=crps(f.terminal,actualIndex);
   return effects.map(e=>{
     const weights={...f.weights,[e.id]:50},p=parameters(company,weights,f.baseline);
-    const counterfactual=simulate({s0:f.startPrice??100,mu:p.mu,sigma:p.sigma,days:f.days,seed:f.seed??731});
+    const counterfactual=simulate({s0:f.startPrice??100,mu:p.mu,sigma:p.sigma,days:f.days,seed:f.seed??731,shock:f.shock??null});
     return{id:e.id,name:e.name,weight:f.weights[e.id],scoreChange:crps(counterfactual.terminal,actualIndex)-score};
   });
 }

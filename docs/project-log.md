@@ -44,3 +44,11 @@ This is a curated record of decisions and completed work from our project conver
 - Decide whether the primary score should emphasize predictive distribution quality, decisions after costs, or both.
 - Validate data licensing, corporate-action treatment, point-in-time availability, and out-of-sample performance before using outputs for personal investment decisions.
 - Consider richer return models only after measuring whether they improve replay scores over the current GBM baseline.
+
+## Portfolio and navigation update
+
+- Built a correlated two-to-five-stock portfolio simulator using aligned daily returns, covariance-based dependence, 20% correlation shrinkage, and a separate independent-stock aggregate for comparison. Added a shared hypothetical event shock and retained cash as any unallocated weight.
+- Added a one-time event shock to the single-stock game and locally saved Bull/Bear scenario comparisons against a fixed baseline. Game drafts now survive an ordinary reload in the same browser.
+- Reorganized the website into an introductory tutorial, game, portfolio, stock calculator, research/market, algorithm, math, code, and data pages. Assumptions now sit beside the graph on wide screens; more detailed material is collapsed or in tooltips.
+- Added 6-month, 2-year, and 5-year horizons, with explicit long-horizon limitations. The Stock Calculator shows inflation-adjusted purchasing power using a user-supplied future inflation assumption.
+- Added a best-effort Yahoo recent-news adapter and surfaced failures transparently. A direct endpoint check returned HTTP 429, so the Research page links to Yahoo Finance when automatic headlines are blocked. No point-in-time historical Yahoo news feed is claimed.
