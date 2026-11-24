@@ -52,3 +52,7 @@ This is a curated record of decisions and completed work from our project conver
 - Reorganized the website into an introductory tutorial, game, portfolio, stock calculator, research/market, algorithm, math, code, and data pages. Assumptions now sit beside the graph on wide screens; more detailed material is collapsed or in tooltips.
 - Added 6-month, 2-year, and 5-year horizons, with explicit long-horizon limitations. The Stock Calculator shows inflation-adjusted purchasing power using a user-supplied future inflation assumption.
 - Added a best-effort Yahoo recent-news adapter and surfaced failures transparently. A direct endpoint check returned HTTP 429, so the Research page links to Yahoo Finance when automatic headlines are blocked. No point-in-time historical Yahoo news feed is claimed.
+
+## November 24, 2026 — guided walkthrough and usability fixes
+
+Reviewed historical, future, and portfolio modes in the live site. Built an interactive first-page illustration tied to the same model as the game, direct mode-aware start buttons, and a live factor effect card. Fixed the default option strike validation, portfolio budget increment, archive flash during live loading, mobile scenario layout, and duplicated independent-stock explanation. The journal now separates price-based and legacy index rounds, explains skill signs, and offers per-run removal with Undo. These changes preserve the model's illustrative calibration and do not turn the results into validated investment forecasts.
