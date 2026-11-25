@@ -27,13 +27,13 @@ function cholesky(matrix){
   return L;
 }
 
-export function portfolioInputs(holdings,weights){
+export function portfolioInputs(holdings,weights,days=21){
   if(holdings.length!==weights.length||new Set(holdings.map(h=>h.symbol)).size!==holdings.length)throw new Error('Portfolio stocks must be distinct.');
   if(weights.some(w=>!Number.isFinite(w)||w<0||w>1)||weights.reduce((a,b)=>a+b,0)>1+1e-9)throw new Error('Stock weights must total 100% or less; the rest stays in cash.');
   const {dates,returns}=alignedReturns(holdings),correlation=correlationMatrix(returns);
   const model=holdings.map(({company,rows},i)=>{
     const baseline=calibrate(rows.filter(row=>row.date<=dates.at(-1)).slice(-253));
-    const current=parameters(company,holdings[i].eventWeights||{},baseline);
+    const current=parameters(company,holdings[i].eventWeights||{},baseline,days);
     return {symbol:company.symbol,mu:current.mu,sigma:current.sigma,startPrice:rows.at(-1).rawClose??rows.at(-1).close};
   });
   return {model,correlation,dates,weights,cashWeight:Math.max(0,1-weights.reduce((a,b)=>a+b,0))};

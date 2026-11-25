@@ -56,3 +56,10 @@ This is a curated record of decisions and completed work from our project conver
 ## November 24, 2026 — guided walkthrough and usability fixes
 
 Reviewed historical, future, and portfolio modes in the live site. Built an interactive first-page illustration tied to the same model as the game, direct mode-aware start buttons, and a live factor effect card. Fixed the default option strike validation, portfolio budget increment, archive flash during live loading, mobile scenario layout, and duplicated independent-stock explanation. The journal now separates price-based and legacy index rounds, explains skill signs, and offers per-run removal with Undo. These changes preserve the model's illustrative calibration and do not turn the results into validated investment forecasts.
+## November 25, 2026 — Replay controls, scoring, and index comparison
+
+- Added a top-level New replay button and opened all factor groups by default while keeping their collapse controls.
+- Added a results scorecard dialog with a stated win rule based on median accuracy versus the unchanged baseline and middle-80% coverage. The journal's CRPS score remains available as a separate distribution measure.
+- Added Yahoo S&P 500 (`^GSPC`) history for the actual historical-replay comparison and a separately labeled modeled S&P 500 median for the portfolio forecast.
+- Increased long-horizon slider sensitivity to annual drift with a bounded rule using the chosen horizon, pre-origin volatility, and fixed stock profile. The math documentation and Python reference now show the rule; it remains an illustrative scenario assumption.
+

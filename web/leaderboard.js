@@ -25,11 +25,11 @@ export function stockSummaries(journal){
 export function factorChecks(f,actualIndex,limit=3){
   if(!Number.isFinite(actualIndex)||!f.baseline||!f.weights||!Array.isArray(f.terminal))return [];
   const company=companies.find(c=>c.symbol===f.symbol);if(!company)return [];
-  const effects=parameters(company,f.weights,f.baseline).effects.filter(e=>e.x!==0)
+  const effects=parameters(company,f.weights,f.baseline,f.days).effects.filter(e=>e.x!==0)
     .sort((a,b)=>(Math.abs(b.drift)+Math.abs(b.vol))-(Math.abs(a.drift)+Math.abs(a.vol))).slice(0,limit);
   const score=crps(f.terminal,actualIndex);
   return effects.map(e=>{
-    const weights={...f.weights,[e.id]:50},p=parameters(company,weights,f.baseline);
+    const weights={...f.weights,[e.id]:50},p=parameters(company,weights,f.baseline,f.days);
     const counterfactual=simulate({s0:f.startPrice??100,mu:p.mu,sigma:p.sigma,days:f.days,seed:f.seed??731,shock:f.shock??null});
     return{id:e.id,name:e.name,weight:f.weights[e.id],scoreChange:crps(counterfactual.terminal,actualIndex)-score};
   });

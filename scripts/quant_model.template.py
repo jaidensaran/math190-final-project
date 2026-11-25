@@ -63,8 +63,14 @@ def calibrate(rows):
             'observations': len(returns), 'rawMu': mu_raw}
 
 
-def parameters(company, weights, baseline):
-    """Grouped illustrative shifts; 50 is baseline, not event probability."""
+def parameters(company, weights, baseline, days=21):
+    """Grouped illustrative shifts; long-horizon drift sensitivity is bounded."""
+    if not isinstance(days, int) or not 1 <= days <= 1260:
+        raise ValueError('Invalid scenario horizon.')
+    horizon_scale = 1 + .5 * math.log2(max(1, days / 126))
+    profile_scale = 1.2 if company['profile'] == 'Specialist' else 1.1 if company['profile'] == 'Growth-oriented' else 1
+    stock_scale = min(1.8, max(.85, baseline['sigma'] / .3) * profile_scale)
+    drift_scale = min(4, horizon_scale * stock_scale)
     contributions = {}
     for e in EVENTS:
         x = (weights.get(e['id'], 50) - 50) / 50
@@ -72,12 +78,13 @@ def parameters(company, weights, baseline):
         if company['profile'] != 'Established' and e['id'] in ['rates', 'credit', 'leverage', 'liquidity']:
             exposure *= 1.25
         direction = -.9 if e['id'] == 'energy' and company['sector'] == 'Energy' else 1
-        contributions.setdefault(e['group'], []).append((x * e['drift'] * exposure * direction,
+        contributions.setdefault(e['group'], []).append((x * e['drift'] * exposure * direction * drift_scale,
                                                         x * e['vol'] * exposure))
     drift = sum(statistics.mean(a for a, _ in g) for g in contributions.values())
     logvol = sum(statistics.mean(b for _, b in g) for g in contributions.values())
-    return {'mu': clip(baseline['mu'] + drift, -.35, .45),
-            'sigma': clip(baseline['sigma'] * math.exp(logvol), .05, 1.20)}
+    return {'mu': clip(baseline['mu'] + drift, -.60, .70),
+            'sigma': clip(baseline['sigma'] * math.exp(logvol), .05, 1.20),
+            'driftScale': drift_scale, 'horizonScale': horizon_scale, 'stockScale': stock_scale}
 
 
 def simulate(s0=100, mu=.05, sigma=.25, days=21, n=1200, seed=731):

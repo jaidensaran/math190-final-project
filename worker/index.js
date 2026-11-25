@@ -23,6 +23,10 @@ export default {async fetch(request,env={},ctx={waitUntil:()=>{}}){try{
   const url=new URL(request.url);
   if(!['GET','HEAD'].includes(request.method))return json({error:'Method not allowed.'},405,{Allow:'GET, HEAD'});
   if(url.pathname==='/api/config')return json({configured:true,provider:'Yahoo Finance',defaultProvider:'yahoo',frequency:'daily',cacheHours:.25,newsConfigured:true,newsHistorical:false,providers:{yahoo:{available:true,requiresKey:false,unofficial:true},alpha:{available:Boolean(env.ALPHA_VANTAGE_API_KEY),requiresKey:true}}});
+  if(url.pathname==='/api/benchmark'){
+    const origin=validOrigin(url.searchParams.get('origin')),horizon=validHorizon(url.searchParams.get('days'));
+    return await cached(request,ctx,['benchmark','^GSPC',origin||'recent',horizon].join(':'),()=>fetchYahoo('^GSPC',origin,fetch,Date.now(),horizon));
+  }
   if(['/api/prices','/api/news'].includes(url.pathname)){
     const symbol=url.searchParams.get('symbol');if(!supported.has(symbol))return json({error:'Choose a company from the supported universe.'},400);
     const provider=url.searchParams.get('provider')||'yahoo';if(!['yahoo','alpha'].includes(provider))return json({error:'Unknown price provider.'},400);

@@ -1,5 +1,6 @@
 import {companies} from './catalog.js';
 import {portfolioInputs,simulatePortfolio} from './portfolio-model.js';
+import {fetchBenchmark,portfolioBenchmark} from './benchmark.js';
 
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=value=>(value<0?'−$':'$')+Math.abs(value).toLocaleString('en-US',{maximumFractionDigits:2,minimumFractionDigits:2});
@@ -14,14 +15,14 @@ const save=()=>{try{localStorage.setItem('quantlab-portfolio',JSON.stringify(sta
 const optionList=selected=>companies.map(c=>`<option value="${c.symbol}" ${selected===c.symbol?'selected':''}>${c.symbol} · ${esc(c.name)}</option>`).join('');
 const path=(values,x,y)=>values.map((v,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
 
-function chart(result){
+function chart(result,benchmark=null){
   const W=720,H=275,p={l:58,r:18,t:15,b:30};
-  const min=Math.min(...result.bands.map(b=>b.lo))*.97,max=Math.max(...result.bands.map(b=>b.hi))*1.03;
+  const values=[...result.bands.map(b=>b.lo),...result.bands.map(b=>b.hi),...(benchmark?.values||[])],min=Math.min(...values)*.97,max=Math.max(...values)*1.03;
   const x=i=>p.l+i/result.days*(W-p.l-p.r),y=v=>p.t+(max-v)/(max-min)*(H-p.t-p.b);
   const high=result.bands.map(b=>b.hi),low=result.bands.map(b=>b.lo);
   const band=path(high,x,y)+' '+low.map((_,i)=>`L${x(result.days-i).toFixed(1)},${y(low[result.days-i]).toFixed(1)}`).join(' ')+'Z';
   const ticks=Array.from({length:4},(_,i)=>{const value=min+(max-min)*i/3;return `<line x1="${p.l}" y1="${y(value)}" x2="${W-p.r}" y2="${y(value)}" stroke="#dce5d2" stroke-dasharray="3 5"/><text x="${p.l-7}" y="${y(value)+3}" text-anchor="end" fill="#71806e" font-size="11">$${Math.round(value).toLocaleString()}</text>`}).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Portfolio wealth paths, median and pointwise middle 80 percent band">${ticks}<path d="${band}" fill="#d9eab5" opacity=".75"/>${result.paths.map(values=>`<path d="${path(values,x,y)}" fill="none" stroke="#a4b691" opacity=".2" stroke-width=".8"/>`).join('')}<line x1="${p.l}" y1="${y(result.budget)}" x2="${W-p.r}" y2="${y(result.budget)}" stroke="#839388" stroke-dasharray="4 5"/><path d="${path(result.bands.map(b=>b.mid),x,y)}" fill="none" stroke="#426938" stroke-width="2.5"/><text x="${p.l}" y="${H-5}" fill="#71806e" font-size="10">START</text><text x="${W-p.r}" y="${H-5}" text-anchor="end" fill="#71806e" font-size="10">SESSION ${result.days}</text></svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Portfolio wealth paths, modeled median and pointwise middle 80 percent band${benchmark?', plus S&P 500 modeled median':''}">${ticks}<path d="${band}" fill="#d9eab5" opacity=".75"/>${result.paths.map(values=>`<path d="${path(values,x,y)}" fill="none" stroke="#a4b691" opacity=".2" stroke-width=".8"/>`).join('')}<line x1="${p.l}" y1="${y(result.budget)}" x2="${W-p.r}" y2="${y(result.budget)}" stroke="#839388" stroke-dasharray="4 5"/><path d="${path(result.bands.map(b=>b.mid),x,y)}" fill="none" stroke="#426938" stroke-width="2.5"/>${benchmark?`<path d="${path(benchmark.values,x,y)}" fill="none" stroke="#5079a5" stroke-width="2.5"/>`:''}<text x="${p.l}" y="${H-5}" fill="#71806e" font-size="10">START</text><text x="${W-p.r}" y="${H-5}" text-anchor="end" fill="#71806e" font-size="10">SESSION ${result.days}</text></svg>`;
 }
 
 async function loadSymbol(symbol,force=false){
@@ -34,6 +35,7 @@ async function loadSymbol(symbol,force=false){
 
 export function portfolioPage(view,{sourceFor,archiveFor,scenarioWeights,providerAvailable}){
   let busy=false,error='',loadRevision=0;
+  let benchmarkData=null,benchmarkStatus='Loading S&P 500 history…',benchmarkRevision=0;
   const sources=new Map();
   const liveFor=symbol=>sources.get(symbol)||cached.get(symbol)?.data||(sourceFor(symbol)?.kind==='provider'?sourceFor(symbol):null);
   const source=symbol=>{
@@ -55,9 +57,9 @@ export function portfolioPage(view,{sourceFor,archiveFor,scenarioWeights,provide
     view.querySelectorAll('[data-portfolio-remove]').forEach(el=>el.onclick=()=>{state.positions.splice(Number(el.dataset.portfolioRemove),1);update()});
     view.querySelector('#portfolioAdd').onclick=()=>{const next=companies.find(c=>!state.positions.some(p=>p.symbol===c.symbol));if(next){state.positions.push({symbol:next.symbol,weight:0});update();loadSelected()}};
     view.querySelector('#portfolioBudget').oninput=el=>{if(el.target.value===''||!el.target.checkValidity()){view.querySelector('#portfolioResult').innerHTML='<div class="callout amber">Enter a positive practice budget up to $100 million.</div>';return}state.budget=Number(el.target.value);save();renderResult()};
-    view.querySelector('#portfolioHorizon').onchange=el=>{state.days=Number(el.target.value);update()};
+    view.querySelector('#portfolioHorizon').onchange=el=>{state.days=Number(el.target.value);benchmarkData=null;update();loadBenchmark()};
     view.querySelector('#portfolioAssumptions').onchange=el=>{state.useGameAssumptions=el.target.checked;update()};
-    view.querySelector('#portfolioRefresh').onclick=()=>loadSelected(true);
+    view.querySelector('#portfolioRefresh').onclick=()=>{loadSelected(true);loadBenchmark(true)};
     for(const [id,key] of [['portfolioShockProbability','probability'],['portfolioShockMove','move']])view.querySelector('#'+id).oninput=e=>{if(!e.target.checkValidity()||e.target.value==='')return;state.shock[key]=Number(e.target.value)/100;save();renderResult()};
     renderResult();
   }
@@ -71,17 +73,20 @@ export function portfolioPage(view,{sourceFor,archiveFor,scenarioWeights,provide
     const holdings=state.positions.map(p=>({symbol:p.symbol,company:companies.find(c=>c.symbol===p.symbol),rows:source(p.symbol)?.rows||[],eventWeights:state.useGameAssumptions?scenarioWeights():{}}));
     if(holdings.some(h=>h.rows.length<41)){node.innerHTML=warning+'<div class="callout amber">Waiting for matching daily histories. If Yahoo is unavailable, choose stocks with matching imported or archived data.</div>';return}
     try{
-      const inputs=portfolioInputs(holdings,weights),result=simulatePortfolio({...inputs,days:state.days,budget:state.budget,shock:state.shock});
+      const inputs=portfolioInputs(holdings,weights,state.days),result=simulatePortfolio({...inputs,days:state.days,budget:state.budget,shock:state.shock});
       const independent=simulatePortfolio({...inputs,correlation:inputs.correlation.map((row,i)=>row.map((_,j)=>i===j?1:0)),days:state.days,budget:state.budget,shock:state.shock});
       const noEvent=simulatePortfolio({...inputs,days:state.days,budget:state.budget});
-      const baselineInputs=state.useGameAssumptions?portfolioInputs(holdings.map(h=>({...h,eventWeights:{}})),weights):inputs;
+      const baselineInputs=state.useGameAssumptions?portfolioInputs(holdings.map(h=>({...h,eventWeights:{}})),weights,state.days):inputs;
       const baselineScenario=simulatePortfolio({...baselineInputs,days:state.days,budget:state.budget});
       const scenarioRows=[['Baseline · no event',baselineScenario],['Your sliders · no event',noEvent],['Your sliders · shared event',result],['Independent returns · shared event',independent]];
       const scenarioTable=`<section class="panel portfolio-scenario-panel"><div class="panel-body"><div class="panel-head"><h3>What changes the outcome?</h3></div><div class="scenario-cards">${scenarioRows.map(([name,run],index)=>`<article class="scenario-card ${index===2?'selected':''}"><small>${name}</small><strong>${money(run.median)}</strong><span>Median ending value</span><div><b>${pct(run.loss)}</b> loss paths</div><div>${money(run.lo)}–${money(run.hi)} middle 80%</div></article>`).join('')}</div><p class="scenario-impact">Your shared event moves the modeled median by <b>${money(result.median-noEvent.median)}</b> and loss frequency by <b>${((result.loss-noEvent.loss)*100).toFixed(1)} percentage points</b> versus the same sliders without an event.</p><details class="model-details"><summary>Why compare these four cases?</summary><p>All cases use the same stocks, weights, horizon, and random seed. The last case removes estimated daily-return correlation but keeps the same shared event; that event can still make outcomes move together. These are model sensitivities, not measured event probabilities.</p></details></div></section>`;
       const asOf=holdings.map(h=>source(h.symbol)?.asOf||h.rows.at(-1).date);
       const holdingCards=`<section class="panel"><div class="panel-body"><h3>Each stock in this model</h3><div class="holding-summary">${inputs.model.map((item,index)=>`<div><strong>${item.symbol} <span>${pct(weights[index])} of budget</span></strong><small>Annual μ ${pct(item.mu)} · σ ${pct(item.sigma)}</small><small>Daily history through ${esc(asOf[index])}</small></div>`).join('')}</div><p class="small-text">The game slider positions ${state.useGameAssumptions?'are applied separately to each company’s exposure.':'are turned off here.'} Each stock keeps its own calibrated drift and volatility.</p></div></section>`;
       const old=asOf.some(date=>(Date.now()-Date.parse(date+'T00:00:00Z'))/86400000>7);
-      node.innerHTML=`${warning}${old?'<div class="callout amber">At least one price series is archived or stale. Treat this as a historical illustration, not a current forecast.</div>':''}${state.days>=504?'<div class="callout amber">Long-horizon results hold today’s estimated drift, volatility, and correlations fixed for years; model uncertainty is especially high.</div>':''}<section class="panel portfolio-chart"><div class="panel-body"><div class="panel-head"><h3>Possible portfolio values</h3><span class="pill">CORRELATED GBM · 600 PATHS · THROUGH ${inputs.dates.at(-1)}</span></div><div class="chart-wrap">${chart(result)}</div><div class="portfolio-metrics"><div><small>MEDIAN ENDING VALUE</small><b>${money(result.median)}</b></div><div><small>MIDDLE 80%</small><b>${money(result.lo)}–${money(result.hi)}</b></div><div><small>MODELED LOSS CHANCE</small><b>${pct(result.loss)}</b></div><div><small>ANNUALIZED PORTFOLIO VOLATILITY</small><b>${pct(result.annualVol)}</b></div></div><p class="small-text">About 10% of simulated ending values fall on each side of the middle 80%. These are conditional model outcomes, not market probabilities.</p></div></section>${scenarioTable}${holdingCards}<section class="panel"><div class="panel-body"><h3>How the stocks move together</h3><div class="table-wrap"><table class="watchlist"><thead><tr><th></th>${inputs.model.map(m=>`<th>${m.symbol}</th>`).join('')}</tr></thead><tbody>${inputs.model.map((m,i)=>`<tr><th>${m.symbol}</th>${inputs.correlation[i].map(value=>`<td>${value.toFixed(2)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="small-text">Correlations use ${inputs.dates.length} shared daily returns ending ${inputs.dates.at(-1)} and are shrunk 20% toward zero for stability. Individual annualized volatilities and drifts are calibrated separately; ${state.useGameAssumptions?'the game slider settings then adjust them by company exposure.':'slider adjustments are off.'} Future correlations and parameters may differ.</p></div></section>`;
+      const benchmarkMatches=benchmarkData&&asOf.every(date=>Math.abs(Date.parse(date+'T00:00:00Z')-Date.parse(benchmarkData.asOf+'T00:00:00Z'))<=7*86400000);
+      const benchmark=benchmarkMatches?portfolioBenchmark(benchmarkData.rows,state.budget,state.days):null;
+      const benchmarkMessage=benchmarkData&&!benchmarkMatches?'S&P 500 dates do not match these holdings. The comparison is withheld.':benchmarkStatus;
+      node.innerHTML=`${warning}${old?'<div class="callout amber">At least one price series is archived or stale. Treat this as a historical illustration, not a current forecast.</div>':''}${state.days>=504?'<div class="callout amber">Long-horizon results hold today’s estimated drift, volatility, and correlations fixed for years; model uncertainty is especially high.</div>':''}<section class="panel portfolio-chart"><div class="panel-body"><div class="panel-head"><h3>Possible portfolio values</h3><span class="pill">CORRELATED GBM · 600 PATHS · THROUGH ${inputs.dates.at(-1)}</span></div><div class="chart-wrap">${chart(result,benchmark)}</div><div class="portfolio-benchmark"><span><i class="portfolio-model-line"></i> Portfolio modeled median</span>${benchmark?`<span><i class="sp500-line"></i> S&amp;P 500 modeled median: ${money(benchmark.median)}</span>`:`<span>${esc(benchmarkMessage)}</span>`}</div><p class="small-text">The blue S&amp;P 500 line is a separate GBM median calibrated from Yahoo index history through ${benchmark?esc(benchmark.asOf):"the latest available date"}. It is a hypothetical forward path for 100% in the price index, not a realized future return or an investable total-return fund.</p><div class="portfolio-metrics"><div><small>MEDIAN ENDING VALUE</small><b>${money(result.median)}</b></div><div><small>MIDDLE 80%</small><b>${money(result.lo)}–${money(result.hi)}</b></div><div><small>MODELED LOSS CHANCE</small><b>${pct(result.loss)}</b></div><div><small>ANNUALIZED PORTFOLIO VOLATILITY</small><b>${pct(result.annualVol)}</b></div></div><p class="small-text">About 10% of simulated ending values fall on each side of the middle 80%. These are conditional model outcomes, not market probabilities.</p></div></section>${scenarioTable}${holdingCards}<section class="panel"><div class="panel-body"><h3>How the stocks move together</h3><div class="table-wrap"><table class="watchlist"><thead><tr><th></th>${inputs.model.map(m=>`<th>${m.symbol}</th>`).join('')}</tr></thead><tbody>${inputs.model.map((m,i)=>`<tr><th>${m.symbol}</th>${inputs.correlation[i].map(value=>`<td>${value.toFixed(2)}</td>`).join('')}</tr>`).join('')}</tbody></table></div><p class="small-text">Correlations use ${inputs.dates.length} shared daily returns ending ${inputs.dates.at(-1)} and are shrunk 20% toward zero for stability. Individual annualized volatilities and drifts are calibrated separately; ${state.useGameAssumptions?'the game slider settings then adjust them by company exposure.':'slider adjustments are off.'} Future correlations and parameters may differ.</p></div></section>`;
     }catch(e){node.innerHTML=`${warning}<div class="callout amber">${esc(e.message)}</div>`}
   }
   async function loadSelected(force=false){
@@ -93,5 +98,11 @@ export function portfolioPage(view,{sourceFor,archiveFor,scenarioWeights,provide
     const failed=results.filter(r=>r.status==='rejected');error=failed.length?`${failed.length} live price request${failed.length===1?'':'s'} failed. Available archived or imported histories remain labeled.`:'';
     busy=false;paint();
   }
-  paint();loadSelected();
+  async function loadBenchmark(force=false){
+    const revision=++benchmarkRevision,days=state.days;benchmarkStatus="Loading S&P 500 history…";if(view.querySelector("#portfolioResult"))renderResult();
+    try{const data=await fetchBenchmark(days,null,force);if(revision!==benchmarkRevision||!view.querySelector("#portfolio-root"))return;benchmarkData=data;benchmarkStatus="S&P 500 history available.";}
+    catch(e){if(revision!==benchmarkRevision||!view.querySelector("#portfolio-root"))return;benchmarkData=null;benchmarkStatus="S&P 500 comparison unavailable: "+e.message;}
+    renderResult();
+  }
+  paint();loadSelected();loadBenchmark();
 }

@@ -12,7 +12,7 @@ const path=(values,x,y)=>values.map((value,index)=>`${index?'L':'M'}${x(index).t
 export function introScenario(factorId='earnings',weight=50){
   const factor=events.find(row=>row.id===factorId);
   if(!factor||!factors.includes(factorId)||!Number.isFinite(weight)||weight<0||weight>100)throw new Error('Invalid tutorial scenario.');
-  const weights={[factorId]:weight},current=parameters(company,weights,baseline);
+  const weights={[factorId]:weight},current=parameters(company,weights,baseline,252);
   const base=simulate({s0:100,mu:baseline.mu,sigma:baseline.sigma,days:252,n:300});
   const changed=simulate({s0:100,mu:current.mu,sigma:current.sigma,days:252,n:300});
   const effect=current.effects.find(row=>row.id===factorId);
